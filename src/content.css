@@ -1,13 +1,9 @@
-/* No AI — instant CSS hide before JS loads */
+/* No AI — instant CSS hide */
 div[data-attrid*="AIOverview" i],
 div[data-attrid*="ai_overview" i],
 div[data-subtree*="ai_overview" i] {
   display: none !important;
 }
-a[href*="udm=50"] {
-  display: none !important;
-}
-.no-ai-hidden {
-  display: none !important;
-  visibility: hidden !important;
-}
+a[href*="udm=50"] { display: none !important; }
+div[jsname="uFMOof"] a[href*="udm=50"] { display: none !important; }
+.no-ai-hidden { display: none !important; visibility: hidden !important; }
