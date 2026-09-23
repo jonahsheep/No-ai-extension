@@ -6,8 +6,8 @@ const DEFAULTS = {
   blockOverview: true,
   blockAiMode: true,
   stripUdm50: true,
-  webOnly: false,
-  aggressive: false,
+  webOnly: true, // COMPLETE BLOCK: udm=14 forces Google Web-only (no AI) server-side
+  aggressive: true, // also hide any residual AI badges
   blockedCount: 0
 };
 
@@ -46,6 +46,47 @@ async function updateBadge(enabled) {
     await chrome.action.setBadgeBackgroundColor({ color: '#9CA3AF' });
   }
 }
+
+// --- COMPLETE BLOCK: server-side udm=14 enforcement (before page loads) ---
+let cached = { ...DEFAULTS };
+chrome.storage.sync.get(DEFAULTS).then(d => cached = d);
+chrome.storage.onChanged.addListener((c, area) => {
+  if (area === 'sync') for (const k of Object.keys(c)) cached[k] = c[k].newValue;
+});
+
+function shouldForceWebOnly(url) {
+  try {
+    const u = new URL(url);
+    if (!u.hostname.includes('google')) return false;
+    if (u.pathname !== '/search') return false;
+    if (!u.searchParams.has('q')) return false;
+    return true;
+  } catch { return false; }
+}
+
+chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
+  if (details.frameId !== 0) return;
+  const s = cached.enabled && cached.webOnly ? cached : await chrome.storage.sync.get(DEFAULTS);
+  if (!s.enabled || !s.webOnly) return;
+  if (!shouldForceWebOnly(details.url)) return;
+  const u = new URL(details.url);
+  if (u.searchParams.get('udm') === '14') return;
+  u.searchParams.set('udm', '14');
+  // strip AI Mode param if present
+  if (u.searchParams.get('udm') === '50') u.searchParams.delete('udm');
+  chrome.tabs.update(details.tabId, { url: u.toString() });
+}, { url: [{ hostSuffix: 'google.com' }, { hostSuffix: 'google.co.uk' }, { hostSuffix: 'google.de' }, { hostSuffix: 'google.fr' }, { hostSuffix: 'google.es' }, { hostSuffix: 'google.it' }, { hostSuffix: 'google.ca' }, { hostSuffix: 'google.com.au' }, { hostSuffix: 'google.co.jp' }, { hostSuffix: 'google.co.in' }] });
+
+// Strip udm=50 even when webOnly is off
+chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
+  if (details.frameId !== 0) return;
+  const s = cached.enabled && cached.stripUdm50 ? cached : await chrome.storage.sync.get(DEFAULTS);
+  if (!s.enabled || !s.stripUdm50) return;
+  const u = new URL(details.url);
+  if (u.searchParams.get('udm') !== '50') return;
+  u.searchParams.delete('udm');
+  chrome.tabs.update(details.tabId, { url: u.toString() });
+}, { url: [{ hostSuffix: 'google.com' }, { hostSuffix: 'google.co.uk' }, { hostSuffix: 'google.de' }] });
 
 // Allow popup to request scan
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {

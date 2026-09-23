@@ -11,8 +11,8 @@
     blockOverview: true,
     blockAiMode: true,
     stripUdm50: true,
-    webOnly: false, // udm=14
-    aggressive: false, // higher note: block all AI content
+    webOnly: true, // COMPLETE BLOCK: default ON — udm=14 Web-only never serves AI
+    aggressive: true,
     blockedCount: 0
   };
 
