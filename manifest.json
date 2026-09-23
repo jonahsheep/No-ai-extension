@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "No AI — Block Google AI Overviews",
-  "version": "0.9.0",
+  "version": "1.0.0",
   "description": "Automatically blocks Google AI Overviews, AI Mode, and optionally all AI content. Clean, fast, no tracking.",
   "permissions": ["storage"],
   "host_permissions": [
@@ -35,5 +35,11 @@
   "background": {
     "service_worker": "src/background.js"
   },
-  "options_page": "src/options.html"
+  "options_page": "src/options.html",
+  "web_accessible_resources": [
+    {
+      "resources": ["src/content.css"],
+      "matches": ["*://*.google.*/*"]
+    }
+  ]
 }
