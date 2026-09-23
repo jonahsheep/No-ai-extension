@@ -6,8 +6,19 @@
   "permissions": ["storage"],
   "host_permissions": [
     "*://*.google.com/*",
-    "*://*.google.co.*/*",
-    "*://*.google.*/*"
+    "*://*.google.co.uk/*",
+    "*://*.google.co.jp/*",
+    "*://*.google.co.in/*",
+    "*://*.google.de/*",
+    "*://*.google.fr/*",
+    "*://*.google.es/*",
+    "*://*.google.it/*",
+    "*://*.google.ca/*",
+    "*://*.google.com.au/*",
+    "*://*.google.nl/*",
+    "*://*.google.pl/*",
+    "*://*.google.com.br/*",
+    "*://*.google.ch/*"
   ],
   "icons": {
     "16": "icons/icon16.png",
@@ -25,7 +36,22 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://*.google.com/*", "*://*.google.co.*/*", "*://*.google.*/*"],
+      "matches": [
+        "*://*.google.com/*",
+        "*://*.google.co.uk/*",
+        "*://*.google.co.jp/*",
+        "*://*.google.co.in/*",
+        "*://*.google.de/*",
+        "*://*.google.fr/*",
+        "*://*.google.es/*",
+        "*://*.google.it/*",
+        "*://*.google.ca/*",
+        "*://*.google.com.au/*",
+        "*://*.google.nl/*",
+        "*://*.google.pl/*",
+        "*://*.google.com.br/*",
+        "*://*.google.ch/*"
+      ],
       "js": ["src/content.js"],
       "css": ["src/content.css"],
       "run_at": "document_start",
@@ -39,7 +65,22 @@
   "web_accessible_resources": [
     {
       "resources": ["src/content.css"],
-      "matches": ["*://*.google.*/*"]
+      "matches": [
+        "*://*.google.com/*",
+        "*://*.google.co.uk/*",
+        "*://*.google.co.jp/*",
+        "*://*.google.co.in/*",
+        "*://*.google.de/*",
+        "*://*.google.fr/*",
+        "*://*.google.es/*",
+        "*://*.google.it/*",
+        "*://*.google.ca/*",
+        "*://*.google.com.au/*",
+        "*://*.google.nl/*",
+        "*://*.google.pl/*",
+        "*://*.google.com.br/*",
+        "*://*.google.ch/*"
+      ]
     }
   ]
 }
