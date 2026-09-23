@@ -1,25 +1,8 @@
-/* No AI — instant CSS hide before JS loads (prevents flash) */
-
-/* Known attribute selectors reported by community filters 2024-2026 */
+/* Bye Bye Google AI parity — instant hide + marker */
 div[data-attrid*="AIOverview" i],
-div[data-attrid*="ai_overview" i],
 div[data-subtree*="ai_overview" i],
-div[data-hveid*="AIOverview" i] {
-  display: none !important;
-}
-
-/* UDM=50 AI Mode tab - hide links that explicitly point to AI Mode */
-a[href*="udm=50"] {
-  display: none !important;
-}
-
-/* Generic AI Mode pill on homepage (jsname rotates, so we hide via JS as fallback — this catches the 2025-2026 jsname) */
-div[jsname="uFMOof"] a[href*="udm=50"],
-div[jsname="YvLQBe"] {
-  display: none !important;
-}
-
-/* Marker class applied by JS — ensure strong hide */
+div[data-hveid*="AIOverview" i] { display: none !important; }
+a[href*="udm=50"] { display: none !important; }
 .no-ai-hidden {
   display: none !important;
   visibility: hidden !important;

@@ -5,53 +5,45 @@ const DEFAULTS = {
   stripUdm50: true,
   webOnly: false,
   aggressive: false,
+  hideAds: false,
+  hideShopping: false,
+  hideDiscussions: false,
+  hideVideos: false,
+  hidePAA: false,
+  hideWhatPeopleSaying: false,
   blockedCount: 0
 };
-
+const ids = Object.keys(DEFAULTS);
 const els = {};
-['enabled','blockOverview','blockAiMode','stripUdm50','webOnly','aggressive','blockedCount','status'].forEach(id => els[id]=document.getElementById(id));
+ids.forEach(id => { const e=document.getElementById(id); if(e) els[id]=e; });
+const statusEl=document.getElementById('status');
+const blockedEl=document.getElementById('blockedCount');
 
-function render(data) {
-  for (const k of Object.keys(DEFAULTS)) {
-    if (els[k] && els[k].type === 'checkbox') {
-      els[k].checked = !!data[k];
-      els[k].disabled = !data.enabled && k !== 'enabled';
+function render(data){
+  ids.forEach(k=>{
+    if(els[k] && els[k].type==='checkbox'){
+      els[k].checked=!!data[k];
+      els[k].disabled = !data.enabled && k!=='enabled';
     }
-  }
-  els.blockedCount.textContent = data.blockedCount ?? 0;
-  if (data.enabled) {
-    els.status.textContent = data.webOnly ? 'Web-only (udm=14) active — cleanest results.' : data.aggressive ? 'Aggressive AI blocking on.' : 'Blocking AI Overviews & AI Mode.';
-    els.status.className = 'status';
-  } else {
-    els.status.textContent = 'Paused — extension is off. Toggle to re-enable.';
-    els.status.className = 'status off';
-  }
+  });
+  blockedEl.textContent=data.blockedCount??0;
+  if(!data.enabled){ statusEl.textContent='Paused — OFF'; statusEl.className='status off'; }
+  else if(data.webOnly){ statusEl.textContent='Web-only (udm=14) — AI completely disabled server-side'; statusEl.className='status'; }
+  else { statusEl.textContent='AI Overviews hidden — Bye Bye parity active'; statusEl.className='status'; }
 }
 
 chrome.storage.sync.get(DEFAULTS, render);
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'sync') return;
-  chrome.storage.sync.get(DEFAULTS, render);
+chrome.storage.onChanged.addListener((_,a)=>{ if(a==='sync') chrome.storage.sync.get(DEFAULTS, render); });
+
+ids.forEach(k=>{
+  const el=els[k];
+  if(!el || el.type!=='checkbox') return;
+  el.addEventListener('change', ()=> chrome.storage.sync.set({[k]: el.checked}));
 });
 
-for (const k of ['enabled','blockOverview','blockAiMode','stripUdm50','webOnly','aggressive']) {
-  els[k].addEventListener('change', () => {
-    const patch = { [k]: els[k].checked };
-    // Safety: enabling aggressive warns? just set
-    chrome.storage.sync.set(patch);
-    if (k === 'webOnly' && els[k].checked) {
-      // confirm with user in background — we already handle redirect in content.js
-    }
-  });
-}
-
-document.getElementById('reset').addEventListener('click', (e) => {
+document.getElementById('reset')?.addEventListener('click', e=>{ e.preventDefault(); chrome.storage.sync.set({blockedCount:0}); });
+document.getElementById('optionsLink')?.addEventListener('click', e=>{
   e.preventDefault();
-  chrome.storage.sync.set({ blockedCount: 0 });
-});
-
-document.getElementById('optionsLink').addEventListener('click', (e) => {
-  e.preventDefault();
-  if (chrome.runtime.openOptionsPage) chrome.runtime.openOptionsPage();
+  if(chrome.runtime.openOptionsPage) chrome.runtime.openOptionsPage();
   else window.open('options.html');
 });

@@ -1,18 +1,24 @@
 /**
- * No AI — Block Google AI Overviews & AI Content
- * Strategy: CSS hides instantly, JS MutationObserver catches everything Google streams in.
- * - Walks up to the search result block boundary (MjjYud / g / ULSxyf etc.) so entire module disappears cleanly.
- * - Text-matching in multiple languages (EN, DE, FR, PT, ES, IT, JA...)
- * - Handles AI Overview, AI Mode tab, AI Mode pill, Gemini prompts, and aggressive AI badges.
+ * Bye Bye Google AI parity — No AI Extension
+ * Hides AI Overviews + optionally Ads, Shopping, Discussions, Videos, PAA, etc.
+ * Strategy: CSS instant hide + text-matching (16 languages) + block walking (MjjYud/g) + udm=14 server-side fallback.
+ * Based on: Bye Bye Google AI (PCWorld/Tom's Hardware) behavior + our complete blocking (udm=14)
  */
 (() => {
   const STORAGE_DEFAULTS = {
     enabled: true,
-    blockOverview: true,
+    blockOverview: true, // default ON — like Bye Bye
     blockAiMode: true,
     stripUdm50: true,
-    webOnly: true, // COMPLETE BLOCK: default ON — udm=14 Web-only never serves AI
-    aggressive: true,
+    webOnly: false, // off by default like Bye Bye (turn on for COMPLETE server-side block)
+    aggressive: false,
+    // Bye Bye parity toggles — all OFF by default
+    hideAds: false,
+    hideShopping: false,
+    hideDiscussions: false,
+    hideVideos: false,
+    hidePAA: false, // People Also Ask / Related questions
+    hideWhatPeopleSaying: false,
     blockedCount: 0
   };
 
@@ -20,30 +26,18 @@
   let observer = null;
   let runQueued = false;
 
-  // Load config
-  chrome.storage.sync.get(STORAGE_DEFAULTS, (data) => {
-    config = data;
-    if (config.enabled) boot();
-  });
-
+  chrome.storage.sync.get(STORAGE_DEFAULTS, d => { config = d; if (config.enabled) boot(); });
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'sync') return;
     let needsReboot = false;
     for (const k of Object.keys(changes)) {
       config[k] = changes[k].newValue;
-      if (['enabled', 'blockOverview', 'blockAiMode', 'aggressive'].includes(k)) needsReboot = true;
+      if (['enabled','blockOverview','blockAiMode','aggressive','hideAds','hideShopping','hideDiscussions','hideVideos','hidePAA','hideWhatPeopleSaying'].includes(k)) needsReboot = true;
     }
     if (needsReboot) {
-      if (config.enabled) {
-        boot();
-        scanAll();
-      } else {
-        teardown();
-        // reveal hidden elements if disabled
-        document.querySelectorAll('.no-ai-hidden').forEach(el => el.classList.remove('no-ai-hidden'));
-      }
+      if (config.enabled) { boot(); scanAll(); }
+      else { teardown(); document.querySelectorAll('.no-ai-hidden').forEach(e=>e.classList.remove('no-ai-hidden')); }
     }
-    // Handle udm redirects immediately
     if (changes.webOnly || changes.stripUdm50) handleUrlParams();
   });
 
@@ -54,209 +48,180 @@
     observer = new MutationObserver(() => {
       if (runQueued) return;
       runQueued = true;
-      requestAnimationFrame(() => {
-        runQueued = false;
-        scanAll();
-      });
+      requestAnimationFrame(() => { runQueued=false; scanAll(); });
     });
-    observer.observe(document.documentElement, { childList: true, subtree: true });
-    // also watch for SPA navigation (Google uses pushState)
+    observer.observe(document.documentElement, { childList:true, subtree:true });
     let lastUrl = location.href;
-    setInterval(() => {
-      if (location.href !== lastUrl) {
-        lastUrl = location.href;
-        handleUrlParams();
-        scanAll();
-      }
-    }, 500);
+    setInterval(()=>{ if(location.href!==lastUrl){ lastUrl=location.href; handleUrlParams(); scanAll(); } },500);
   }
+  function teardown(){ if(observer){ observer.disconnect(); observer=null; } }
 
-  function teardown() {
-    if (observer) {
-      observer.disconnect();
-      observer = null;
-    }
-  }
-
-  function handleUrlParams() {
+  function handleUrlParams(){
     const url = new URL(location.href);
     if (!url.hostname.includes('google')) return;
-
-    // Strip udm=50 (AI Mode) -> back to regular search
-    if (config.stripUdm50 && url.searchParams.get('udm') === '50') {
-      url.searchParams.delete('udm');
-      history.replaceState(null, '', url.toString());
-      // optionally reload is not needed — Google will re-render
-    }
-
-    // Web-only mode udm=14
-    if (config.webOnly && url.pathname === '/search' && url.searchParams.get('udm') !== '14' && url.searchParams.has('q')) {
-      url.searchParams.set('udm', '14');
-      // Avoid infinite loop: only if not already 14
+    if (config.stripUdm50 && url.searchParams.get('udm')==='50'){ url.searchParams.delete('udm'); history.replaceState(null,'',url.toString()); }
+    if (config.webOnly && url.pathname==='/search' && url.searchParams.get('udm')!=='14' && url.searchParams.has('q')){
+      url.searchParams.set('udm','14');
       location.replace(url.toString());
     }
   }
 
-  // --- Detection helpers ---
-
-  // All languages we catch (Google localizes the heading)
-  const AI_OVERVIEW_RE = /(AI\s*Overview|KI[-\s]*Übersicht|Vue d'ensemble par l'IA|Aperçu par l'IA|Visão geral (da |com )?IA|Resumen de IA|Panoramica (sull'|con )?IA|AIによる概要|AI\s*overblik|AI-overzicht)/i;
+  // 16 languages — like Bye Bye v1.4
+  const AI_OVERVIEW_RE = /(AI\s*Overview|KI[-\s]*Übersicht|Vue d'ensemble par l'IA|Aperçu par l'IA|Visão geral (da |com )?IA|Resumen de IA|Panoramica (sull'|con )?IA|AIによる概要|AI\s*overblik|AI-overzicht|AI\s*Översikt|Przegląd AI|Обзор от ИИ)/i;
   const AI_MODE_RE = /^\s*AI\s*Mode\s*$/i;
   const AI_MODE_ALT_RE = /(KI-Modus|Mode IA|Modo IA|Modalità AI)/i;
+  const GENERATIVE_RE = /(Generative AI|AI-generated|Generated by AI|Créé par IA|Erstellt mit KI)/i;
 
-  const GENERATIVE_RE = /(Generative AI|AI-generated|Generated by AI|Créé par IA|Erstellt mit KI|AI summary|Résumé IA)/i;
+  // Bye Bye block headings (16 languages)
+  const ADS_RE = /^\s*Sponsored\s*$/i;
+  const SPONSORED_FOOTER_RE = /Sponsored|Annonce|Anzeige|Patrocinado|Gesponsert/i;
+  const SHOPPING_RE = /^\s*(Shopping|Shopping results|Products|Anzeigen \u00b7 Shopping|Sponsored \u00b7 Shopping)\s*$/i;
+  const DISCUSSIONS_RE = /^\s*(Discussions and forums|Discussions|Forums|Discussions et forums|Diskussionen und Foren|Discusiones y foros|Discussioni e forum)\s*$/i;
+  const VIDEOS_RE = /^\s*(Videos|Short videos|Vidéos|Vídeos|Video|Kurze Videos)\s*$/i;
+  const PAA_RE = /^\s*(People also ask|Related questions|People also search for|Autres questions posées|Nutzer fragen auch|Preguntas relacionadas|Altre domande|Perguntas relacionadas|Related searches|Recherches associées)\s*$/i;
+  const WHAT_PEOPLE_SAYING_RE = /^\s*What people are saying\s*$/i;
 
-  function isVisible(el) {
-    const r = el.getBoundingClientRect();
-    return r.width > 0 || r.height > 0;
-  }
-
-  // Walk up to the block container Google uses for a single result module
-  function findBlockContainer(startEl) {
-    let el = startEl;
-    // Google wraps each SERP module in div with e.g. class="MjjYud" or "g" or data-hveid
-    // We walk up until we hit a container that looks like a block but not the whole #search
-    for (let i = 0; i < 8 && el && el !== document.body; i++) {
-      if (el.matches && (
-        el.matches('div.MjjYud') ||
-        el.matches('div.g') ||
-        el.matches('div[data-hveid]') ||
-        el.matches('div.ULSxyf') ||
-        el.matches('div[data-subtree]') ||
-        el.matches('div#search > div') // fallback
-      )) {
-        // Ensure it's not the entire search container
-        if (el.id !== 'search' && el.id !== 'rso') return el;
+  function isVisible(el){ const r=el.getBoundingClientRect(); return r.width>0 || r.height>0; }
+  function findBlockContainer(startEl){
+    let el=startEl;
+    for(let i=0;i<10&&el&&el!==document.body;i++){
+      if(el.matches && (
+        el.matches('div.MjjYud')||el.matches('div.g')||el.matches('div[data-hveid]')||el.matches('div.ULSxyf')||el.matches('div[data-subtree]')||el.matches('div[data-ved][data-hveid]')||el.matches('div#search > div')
+      )){
+        if(el.id!=='search'&&el.id!=='rso'&&el.id!=='tads') return el;
       }
-      el = el.parentElement;
+      el=el.parentElement;
     }
-    // fallback: hide the header's parent (3 levels up)
-    return startEl.parentElement?.parentElement?.parentElement || startEl;
+    return startEl.parentElement?.parentElement?.parentElement||startEl;
   }
-
-  function hide(el, reason) {
-    if (!el || el.classList.contains('no-ai-hidden')) return;
+  function hide(el, reason){
+    if(!el||el.classList.contains('no-ai-hidden')) return;
     el.classList.add('no-ai-hidden');
-    el.setAttribute('data-no-ai-reason', reason);
-    config.blockedCount++;
-    chrome.storage.sync.set({ blockedCount: config.blockedCount });
-    // debug
-    // console.log('[No AI] hid', reason, el);
+    el.setAttribute('data-no-ai-reason',reason);
+    config.blockedCount++; chrome.storage.sync.set({blockedCount:config.blockedCount});
   }
 
-  function scanAll() {
-    if (!config.enabled) return;
+  function scanAll(){
+    if(!config.enabled) return;
 
-    // 1) AI Overview — by attribute (fast)
-    if (config.blockOverview) {
-      document.querySelectorAll('div[data-attrid*="AIOverview" i], div[data-subtree*="ai_overview" i]').forEach(el => {
-        const block = findBlockContainer(el);
-        hide(block, 'attr-ai-overview');
-      });
+    // 1) Attribute fast path — AI Overview
+    if(config.blockOverview){
+      document.querySelectorAll('div[data-attrid*="AIOverview" i], div[data-subtree*="ai_overview" i]').forEach(e=>hide(findBlockContainer(e),'attr-ai'));
     }
 
-    // 2) AI Overview — by text scan (robust against rotation) — photosynthesis hotfix 2026-09-23
-    if (config.blockOverview) {
+    // 2) Text scan — AI Overview + footer heuristic (photosynthesis fix)
+    if(config.blockOverview){
       const footerRE = /AI responses may include|Generative AI is experimental|Learn more|Show more|Show less/i;
-      const candidates = document.querySelectorAll('h1, h2, h3, span, div, a, p, [role="heading"], [data-attrid], [data-hveid]');
-      for (const el of candidates) {
-        if (el.classList.contains('no-ai-hidden')) continue;
-        const t = (el.textContent || '').trim();
-        // catch header OR footer (footer is reliable when header rotates)
-        if (t.length > 3 && t.length < 120 && (AI_OVERVIEW_RE.test(t) || (footerRE.test(t) && el.closest('#search, #rso')))) {
-          // Ensure it's inside search, not random page mention
-          const searchRoot = document.getElementById('search') || document.getElementById('rso') || document.body;
-          if (!searchRoot.contains(el)) continue;
-          const block = findBlockContainer(el);
-          // Sanity: block should be sizable and near top
-          if (block && isVisible(block)) {
-            hide(block, 'text-ai-overview:' + t.slice(0, 30));
-          }
+      const cands = document.querySelectorAll('h1,h2,h3,span,div,a,p,[role="heading"],[data-attrid],[data-hveid]');
+      for(const el of cands){
+        if(el.classList.contains('no-ai-hidden')) continue;
+        const t=(el.textContent||'').trim();
+        if(t.length>3 && t.length<120 && (AI_OVERVIEW_RE.test(t) || (footerRE.test(t) && el.closest('#search,#rso')))){
+          const root=document.getElementById('search')||document.getElementById('rso')||document.body;
+          if(!root.contains(el)) continue;
+          const block=findBlockContainer(el);
+          if(block && isVisible(block)) hide(block,'ai-overview:'+t.slice(0,30));
         }
       }
     }
 
-    // 3) AI Mode — tab in SERP nav + pill on homepage
-    if (config.blockAiMode) {
-      // Hide any link to udm=50 (AI Mode)
-      document.querySelectorAll('a[href*="udm=50"]').forEach(a => {
-        // Hide the tab, not just the anchor — walk to tab element
-        const tab = a.closest('div[role="navigation"] div, div[role="listitem"], li, div.hdtb-mitem') || a;
-        hide(tab, 'ai-mode-link');
-        // Also hide the anchor itself
-        a.classList.add('no-ai-hidden');
+    // 3) AI Mode
+    if(config.blockAiMode){
+      document.querySelectorAll('a[href*="udm=50"]').forEach(a=>{
+        const tab=a.closest('div[role="navigation"] div, div[role="listitem"], li, div.hdtb-mitem')||a;
+        hide(tab,'ai-mode-link'); a.classList.add('no-ai-hidden');
       });
+      const nav=document.querySelector('div[role="navigation"]'); const scope=nav||document;
+      scope.querySelectorAll('a,span,div[role="tab"]').forEach(el=>{
+        const t=(el.textContent||'').trim();
+        if((AI_MODE_RE.test(t)||AI_MODE_ALT_RE.test(t))&&t.length<30) hide(el.closest('a,div[role="tab"],li')||el,'ai-mode-text');
+      });
+    }
 
-      // Text-match tabs that say "AI Mode" (and localized variants)
-      const nav = document.querySelector('div[role="navigation"]');
-      const scope = nav || document;
-      scope.querySelectorAll('a, span, div[role="tab"]').forEach(el => {
-        const t = (el.textContent || '').trim();
-        if ((AI_MODE_RE.test(t) || AI_MODE_ALT_RE.test(t)) && t.length < 30) {
-          const tab = el.closest('a, div[role="tab"], li') || el;
-          // Extra check: near other tabs
-          if (tab) hide(tab, 'ai-mode-text:' + t);
+    // 4) Bye Bye parity — each block by heading
+    const searchRoot=document.getElementById('search')||document.body;
+
+    if(config.hideAds){
+      // attribute based
+      document.querySelectorAll('div[data-text-ad], div#tads, div#tvcap, div[data-ved][data-hveid]').forEach(el=>{
+        // check if contains Sponsored label
+        const hasSponsored = el.textContent && ADS_RE.test(el.querySelector('span')?.textContent||'') || SPONSORED_FOOTER_RE.test(el.textContent.slice(0,300));
+        if(el.id==='tads' || el.id==='tvcap' || el.hasAttribute('data-text-ad') || hasSponsored){
+          if(searchRoot.contains(el) && isVisible(el)) hide(el,'ads');
         }
       });
-
-      // Homepage AI Mode pill inside the search bar
-      document.querySelectorAll('button, a, div[jsname]').forEach(el => {
-        const t = (el.textContent || '').trim();
-        if (t.length < 20 && AI_MODE_RE.test(t)) {
-          // Only hide if it's inside the search homepage
-          if (el.closest('div[jsname="uFMOof"], form[role="search"], div.A8SBwf')) {
-            hide(el.closest('button, a') || el, 'ai-mode-pill');
-          }
+      // span Sponsored heading
+      document.querySelectorAll('span').forEach(el=>{
+        const t=(el.textContent||'').trim();
+        if(ADS_RE.test(t) && el.closest('#search,#tads,#tvcap')){
+          hide(findBlockContainer(el),'ads-text');
         }
       });
     }
 
-    // 4) Aggressive — broader AI content (higher note)
-    if (config.aggressive) {
-      // Google AI features: Gemini, Labs, AI expand, Generative AI disclaimers
-      document.querySelectorAll('span, div, a, button').forEach(el => {
-        const t = (el.textContent || '').trim();
-        if (t.length < 80 && GENERATIVE_RE.test(t)) {
-          // Only hide small disclaimers/badges, not entire articles that mention AI
-          // We hide the badge container, not paragraphs
-          if (el.matches('span, div') && t.length < 40) {
-            const badge = el.closest('div.MjjYud, div.g, span') || el;
-            // Avoid hiding organic results that just mention AI in text — check if it's a small UI badge
-            if (badge && badge.textContent.trim().length < 120) {
-              // Check visual cues: often has icon + short label
-              hide(badge, 'aggressive-badge:' + t.slice(0, 30));
-            }
-          }
+    if(config.hideShopping){
+      document.querySelectorAll('h2,h3,span,div').forEach(el=>{
+        const t=(el.textContent||'').trim();
+        if(t.length<40 && SHOPPING_RE.test(t) && el.closest('#search')){
+          hide(findBlockContainer(el),'shopping');
         }
       });
+    }
 
-      // Hide "AI Images", "AI-generated images" sections in image search
-      document.querySelectorAll('div, span').forEach(el => {
-        const t = (el.textContent || '').trim();
-        if (/AI-?generated images/i.test(t) && t.length < 50) {
-          const block = findBlockContainer(el);
-          hide(block, 'aggressive-ai-images');
+    if(config.hideDiscussions){
+      document.querySelectorAll('h2,h3,span,div[role="heading"]').forEach(el=>{
+        const t=(el.textContent||'').trim();
+        if(t.length<50 && DISCUSSIONS_RE.test(t) && el.closest('#search')){
+          hide(findBlockContainer(el),'discussions');
         }
       });
+    }
 
-      // YouTube AI summaries / Gemini in Workspace (if on google domains)
-      document.querySelectorAll('[aria-label*="Gemini" i], [aria-label*="Ask Gemini" i], button:has(span:contains("Gemini"))').forEach(el => {
-        // fallback without :contains — use text check above already
+    if(config.hideVideos){
+      document.querySelectorAll('h2,h3,span').forEach(el=>{
+        const t=(el.textContent||'').trim();
+        if(t.length<30 && VIDEOS_RE.test(t) && el.closest('#search')){
+          // Videos block is often a g-scrolling-carousel; hide the whole block
+          hide(findBlockContainer(el),'videos');
+        }
       });
+      // fallback: hide carousel with video thumbnails if heading found
+      if(document.querySelector('h3')?.textContent?.match(VIDEOS_RE)){
+        document.querySelectorAll('g-scrolling-carousel, div[data-hveid][data-ved]').forEach(el=>{
+          if(el.closest('#search') && el.querySelector('video, img[src*="video"]')) hide(el,'videos-carousel');
+        });
+      }
+    }
 
-      // Generic — hide fixed Gemini prompts on google.com
-      document.querySelectorAll('div[jsname][data-ved]').forEach(el => {
-        // heuristic: if it contains Gemini icon + prompt text, hide
-        if (el.textContent.includes('Gemini') && el.textContent.length < 200) {
-          // Only if inside SERP header
-          if (el.closest('#search')) {
-            // be conservative
-          }
+    if(config.hidePAA){
+      document.querySelectorAll('h2,h3,span,div').forEach(el=>{
+        const t=(el.textContent||'').trim();
+        if(t.length<50 && PAA_RE.test(t) && el.closest('#search')){
+          hide(findBlockContainer(el),'paa');
+        }
+      });
+    }
+
+    if(config.hideWhatPeopleSaying){
+      document.querySelectorAll('h2,h3,span').forEach(el=>{
+        const t=(el.textContent||'').trim();
+        if(WHAT_PEOPLE_SAYING_RE.test(t) && el.closest('#search')){
+          hide(findBlockContainer(el),'what-people-saying');
+        }
+      });
+    }
+
+    // Aggressive legacy
+    if(config.aggressive){
+      document.querySelectorAll('span,div').forEach(el=>{
+        const t=(el.textContent||'').trim();
+        if(t.length<80 && GENERATIVE_RE.test(t) && el.matches('span,div') && t.length<40){
+          const badge=el.closest('div.MjjYud, div.g, span')||el;
+          if(badge && badge.textContent.trim().length<120) hide(badge,'aggressive:'+t.slice(0,30));
         }
       });
     }
   }
 
-  // Expose for debugging
-  window.__noAi = { scanAll, findBlockContainer, get config() { return config; } };
+  window.__noAi={scanAll, findBlockContainer, get config(){return config;}};
 })();

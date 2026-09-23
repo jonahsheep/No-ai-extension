@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "No AI — Block Google AI Overviews",
-  "version": "1.1.0",
-  "description": "COMPLETELY blocks Google AI Overviews (server-side udm=14 + DOM hiding). No AI, no flash.",
+  "name": "Bye Bye Google AI — No AI Extension",
+  "version": "2.0.0",
+  "description": "Filter Google search: hide AI Overviews, Ads, Discussions, Videos, Shopping — you choose. Like Bye Bye Google AI, with complete udm=14 blocking.",
   "permissions": ["storage", "webNavigation"],
   "host_permissions": [
     "*://*.google.com/*",
@@ -26,7 +26,7 @@
     "128": "icons/icon128.png"
   },
   "action": {
-    "default_title": "No AI — Settings",
+    "default_title": "Bye Bye Google AI",
     "default_popup": "src/popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
