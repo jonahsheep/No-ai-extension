@@ -155,15 +155,15 @@
       });
     }
 
-    // 2) AI Overview — by text scan (robust against rotation)
+    // 2) AI Overview — by text scan (robust against rotation) — photosynthesis hotfix 2026-09-23
     if (config.blockOverview) {
-      // Scan headings/spans — cheaper than scanning all divs
-      const candidates = document.querySelectorAll('h1, h2, h3, span, div[role="heading"]');
+      const footerRE = /AI responses may include|Generative AI is experimental|Learn more|Show more|Show less/i;
+      const candidates = document.querySelectorAll('h1, h2, h3, span, div, a, p, [role="heading"], [data-attrid], [data-hveid]');
       for (const el of candidates) {
         if (el.classList.contains('no-ai-hidden')) continue;
         const t = (el.textContent || '').trim();
-        // AI Overview heading is typically short: <span>AI Overview</span> or <h2>AI Overview</h2>
-        if (t.length > 3 && t.length < 60 && AI_OVERVIEW_RE.test(t)) {
+        // catch header OR footer (footer is reliable when header rotates)
+        if (t.length > 3 && t.length < 120 && (AI_OVERVIEW_RE.test(t) || (footerRE.test(t) && el.closest('#search, #rso')))) {
           // Ensure it's inside search, not random page mention
           const searchRoot = document.getElementById('search') || document.getElementById('rso') || document.body;
           if (!searchRoot.contains(el)) continue;
